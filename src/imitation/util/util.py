@@ -66,7 +66,7 @@ def make_vec_env(env_name: str,
   env_fns = [functools.partial(make_env, i) for i in range(n_envs)]
   if parallel:
     # See GH hill-a/stable-baselines issue #217
-    return SubprocVecEnv(env_fns, start_method='forkserver')
+    return SubprocVecEnv(env_fns)
   else:
     return DummyVecEnv(env_fns)
 
