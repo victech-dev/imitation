@@ -37,15 +37,15 @@ setup(
     },
     install_requires=[
         'awscli',
-        'gym[classic_control]',
-        'numpy>=1.15',
-        'ray[debug]==0.7.4',
+        #'gym[classic_control]',
+        #'numpy>=1.15',
+        #'ray[debug]==0.7.4',
         'tqdm',
         'scikit-learn>=0.21.2',
         # TODO(adam): Change to >=2.9.0 once 2.9.0 released
-        'stable-baselines @ git+https://github.com/hill-a/stable-baselines.git',
+        #'stable-baselines @ git+https://github.com/hill-a/stable-baselines.git',
         'jax!=0.1.37',
-        'jaxlib~=0.1.20',
+        #'jaxlib~=0.1.20',
         # sacred==0.7.5 build is broken without pymongo
         # sacred>0.7.4 have non-picklable config objects (see GH #109)
         'sacred==0.7.4',
