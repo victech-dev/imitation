@@ -44,6 +44,7 @@ class AdversarialTrainer:
                disc_opt_cls: tf.train.Optimizer = tf.train.AdamOptimizer,
                disc_opt_kwargs: dict = {},
                n_disc_samples_per_buffer: int = 200,
+               n_gen_samples_per_epoch: Optional[int] = None,
                gen_replay_buffer_capacity: Optional[int] = None,
                init_tensorboard: bool = False,
                init_tensorboard_graph: bool = False,
@@ -82,6 +83,7 @@ class AdversarialTrainer:
     self._global_step = tf.train.create_global_step()
 
     self._n_disc_samples_per_buffer = n_disc_samples_per_buffer
+    self._n_gen_samples_per_epoch = n_gen_samples_per_epoch or n_disc_samples_per_buffer
     self.debug_use_ground_truth = debug_use_ground_truth
 
     self.venv = venv
@@ -152,7 +154,7 @@ class AdversarialTrainer:
         gen_acts (np.ndarray): See `_build_disc_feed_dict`.
         gen_next_obs (np.ndarray): See `_build_disc_feed_dict`.
     """
-    for _ in range(n_steps):
+    for _ in tqdm(range(n_steps), desc='Disc', ncols=80):
       fd = self._build_disc_feed_dict(**kwargs)
       step, _ = self._sess.run([self._global_step, self._disc_train_op],
                                feed_dict=fd)
@@ -177,7 +179,7 @@ class AdversarialTrainer:
     """
     gen_rollouts = util.rollout.generate_transitions(
         self._gen_policy, self.venv_train,
-        n_timesteps=self._n_disc_samples_per_buffer)
+        n_timesteps=self._n_gen_samples_per_epoch)
     self._gen_replay_buffer.store(gen_rollouts)
 
   def train(self, n_epochs=100, *, n_gen_steps_per_epoch=None,
