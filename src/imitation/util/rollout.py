@@ -2,7 +2,7 @@ import collections
 import functools
 import os
 import pickle
-from tqdm import tqdm
+import time
 from typing import Callable, Dict, List, NamedTuple, Optional, Sequence, Union
 
 import numpy as np
@@ -123,45 +123,38 @@ class _TrajectoryAccumulator:
     self.partial_trajectories[idx].append(step_dict)
 
 
-GenTrajTerminationFn = Callable[[Sequence[Trajectory], _TrajectoryAccumulator], bool]
+GenTrajTerminationFn = Callable[[Sequence[Trajectory]], bool]
 
-class _GenTrajUntilTimesteps(object):
-  def __init__(self, n: int):
-    self._n = n
-    self._pbar = tqdm(total=n, desc='Rollouts', ncols=80)
-  def __call__(self, trajs: Sequence[Trajectory], trajs_accum: _TrajectoryAccumulator):
-    # timesteps of finished trajectories
-    timesteps = sum(len(t.obs) - 1 for t in trajs)
-    # timesteps of trajectories in progress
-    timesteps_accum = sum(len(t) - 1 for t in trajs_accum.partial_trajectories.values())
-    # update progress bar
-    inc = max(min(self._n, timesteps + timesteps_accum) - self._pbar.n, 0)
-    if inc > 0:
-      self._pbar.update(inc)
-    # note we are not interested in partial trajectories for now
-    if timesteps >= self._n:
-      self._pbar.close()
-      return True
-    return False
+def min_episodes(n: int) -> GenTrajTerminationFn:
+  """Terminate after collecting n episodes of data.
 
-class _GenTrajUntilEpisodes(object):
-  def __init__(self, n: int):
-    self._n = n
-    self._pbar = tqdm(total=n, desc='Rollouts', ncols=80, bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}]')
-  def __call__(self, trajs: Sequence[Trajectory], trajs_accum: _TrajectoryAccumulator):
-    episodes = len(trajs)
-    # update progress bar
-    inc = max(min(self._n, episodes) - self._pbar.n, 0)
-    if inc > 0:
-      self._pbar.update(inc)
-    # note we are not interested in partial trajectories for now
-    if episodes >= self._n:
-      self._pbar.close()
-      return True
-    return False
+  Argument:
+    n: Minimum number of episodes of data to collect.
+        May overshoot if two episodes complete simultaneously (unlikely).
 
-min_timesteps = _GenTrajUntilTimesteps
-min_episodes = _GenTrajUntilEpisodes
+  Returns:
+    A function implementing this termination condition.
+  """
+  def f(trajectories: Sequence[Trajectory]):
+    return len(trajectories) >= n
+  return f
+
+
+def min_timesteps(n: int) -> GenTrajTerminationFn:
+  """Terminate at the first episode after collecting n timesteps of data.
+
+  Arguments:
+    n: Minimum number of timesteps of data to collect.
+        May overshoot to nearest episode boundary.
+
+  Returns:
+    A function implementing this termination condition.
+  """
+  def f(trajectories: Sequence[Trajectory]):
+    timesteps = sum(len(t.obs) - 1 for t in trajectories)
+    return timesteps >= n
+  return f
+
 
 def make_sample_until(n_timesteps: Optional[int],
                       n_episodes: Optional[int],
@@ -219,6 +212,17 @@ def generate_trajectories(policy,
   else:
     get_action = functools.partial(get_action_policy, policy)
 
+  # VICTECH - show progress
+  total_steps, last_print_t = 0, time.time()
+  def _show_progress(close=False):
+    nonlocal total_steps, last_print_t
+    if not close:
+      total_steps += venv.num_envs
+    if last_print_t + 1 < time.time() or close:
+      print(f'\r[Generating rollouts: {total_steps}]', '- Done' if close else '', end=None if close else '', flush=True)
+      last_print_t = time.time()
+  # VICTECH
+
   # Collect rollout tuples.
   trajectories = []
   # accumulator for incomplete trajectories
@@ -231,10 +235,12 @@ def generate_trajectories(policy,
     # "previous obs" (this matters for, e.g., Atari, where observations are
     # really big).
     trajectories_accum.add_step(env_idx, dict(obs=obs))
-  while not sample_until(trajectories, trajectories_accum):
+  while not sample_until(trajectories):
     obs_old_batch = obs_batch
     act_batch, _ = get_action(obs_old_batch, deterministic=deterministic_policy)
     obs_batch, rew_batch, done_batch, info_batch = venv.step(act_batch)
+    _show_progress()
+
     # Don't save tuples if there is a done. The next_obs for any environment
     # is incorrect for any timestep where there is an episode end, so we fix it
     # with returned state info.
@@ -262,6 +268,7 @@ def generate_trajectories(policy,
         trajectories.append(new_traj)
         trajectories_accum.add_step(env_idx, dict(obs=obs))
         continue
+  _show_progress(close=True)
 
   # Note that we just drop partial trajectories. This is not ideal for some
   # algos; e.g. BC can probably benefit from partial trajectories, too.
