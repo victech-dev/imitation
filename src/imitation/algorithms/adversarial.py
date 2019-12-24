@@ -160,23 +160,12 @@ class AdversarialTrainer:
         gen_acts (np.ndarray): See `_build_disc_feed_dict`.
         gen_next_obs (np.ndarray): See `_build_disc_feed_dict`.
     """
-    step_count = 0
-    while True:
+    for _ in range(n_steps):
       fd = self._build_disc_feed_dict(**kwargs)
       step, _ = self._sess.run([self._global_step, self._disc_train_op],
                                feed_dict=fd)
       if self._init_tensorboard and step % 20 == 0:
         self._summarize(fd, step)
-      #DEBUG!!!
-      rew = self.reward_train(obs=fd[self.discrim.obs_ph], act=fd[self.discrim.act_ph], next_obs=fd[self.discrim.next_obs_ph], steps=None)
-      rew_expert = np.mean(rew[:len(rew)//2])
-      rew_gen = np.mean(rew[len(rew)//2:])
-      step_count += 1
-      print(f'* Training discriminator({step_count}): rew_expert({rew_expert}), rew_gen({rew_gen})' + (' ' * 32), end='\r')
-      if rew_expert > rew_gen + 0.1 or step_count >= 64:
-        break
-    print()
-      #DEBUG!!!
 
   def train_gen(self, n_steps=10000, learning_rate=None):
     # VICTECH - disable VecNormalize
@@ -203,6 +192,9 @@ class AdversarialTrainer:
         self._gen_policy, self.venv_train,
         n_timesteps=self._n_gen_samples_per_epoch)
     self._gen_replay_buffer.store(gen_rollouts)
+    # VICTECH
+    self._latest_gen_rollouts = gen_rollouts
+    # VICTECH
 
   def train(self, n_epochs=100, *, n_gen_steps_per_epoch=None,
             n_disc_steps_per_epoch=None):
