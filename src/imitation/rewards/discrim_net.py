@@ -244,15 +244,19 @@ class DiscrimNetAIRL(DiscrimNet):
     return self.reward_net.reward_output_test
 
   def build_policy_train_reward(self):
-    # Construct generator reward:
-    # \[\hat{r}(s,a) = \log(D_{\theta}(s,a)) - \log(1 - D_{\theta}(s,a)).\]
-    # This simplifies to:
-    # \[\hat{r}(s,a) = f_{\theta}(s,a) - \log \pi(a \mid s).\]
-    # This is just an entropy-regularized objective.
-    self._log_D = tf.nn.log_softmax(self.reward_net.reward_output_train)
-    self._log_D_compl = tf.nn.log_softmax(self.log_policy_act_prob_ph)
-    # Note self._log_D_compl is effectively an entropy term.
-    return self._log_D - self.entropy_weight * self._log_D_compl
+    # VICTECH (not answered yet)
+    # https://github.com/HumanCompatibleAI/imitation/issues/138
+    # # Construct generator reward:
+    # # \[\hat{r}(s,a) = \log(D_{\theta}(s,a)) - \log(1 - D_{\theta}(s,a)).\]
+    # # This simplifies to:
+    # # \[\hat{r}(s,a) = f_{\theta}(s,a) - \log \pi(a \mid s).\]
+    # # This is just an entropy-regularized objective.
+    # self._log_D = tf.nn.log_softmax(self.reward_net.reward_output_train)
+    # self._log_D_compl = tf.nn.log_softmax(self.log_policy_act_prob_ph)
+    # # Note self._log_D_compl is effectively an entropy term.
+    # return self._log_D - self.entropy_weight * self._log_D_compl
+    return self.reward_net.reward_output_train - self.entropy_weight * self.log_policy_act_prob_ph
+    # VICTECH
 
   def _save(self, directory):
     os.makedirs(directory, exist_ok=True)
