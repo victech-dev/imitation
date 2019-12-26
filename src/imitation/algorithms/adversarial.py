@@ -122,8 +122,8 @@ class AdversarialTrainer:
       self.venv_test = reward_wrapper.RewardVecEnvWrapper(
           self.venv, self.reward_test)
 
-    # VICTECH - disable VecNormalize
-    # self.venv_train_norm = VecNormalize(self.venv_train)
+    # VICTECH - reward normalization
+    self.venv_train_norm = VecNormalize(self.venv_train, norm_obs=False)
     # VICTECH
 
     if gen_replay_buffer_capacity is None:
@@ -168,9 +168,8 @@ class AdversarialTrainer:
         self._summarize(fd, step)
 
   def train_gen(self, n_steps=10000, learning_rate=None):
-    # VICTECH - disable VecNormalize
-    # self._gen_policy.set_env(self.venv_train_norm)
-    self._gen_policy.set_env(self.venv_train)
+    self._gen_policy.set_env(self.venv_train_norm)
+    # VICTECH - learning_rate
     if learning_rate is not None:
       self._gen_policy.learning_rate = learning_rate
     # VICTECH
@@ -302,13 +301,10 @@ class AdversarialTrainer:
     assert n_gen == len(gen_acts)
     assert n_gen == len(gen_next_obs)
 
-    # VICTECH - disable VecNormalize
-    # # Normalize expert observations to match generator observations.
-    # with util.vec_norm_disable_training(self.venv_train_norm):
-    #   expert_obs_norm = self.venv_train_norm._normalize_observation(
-    #     expert_sample.obs)
-    expert_obs_norm = expert_sample.obs
-    # VICTECH
+    # Normalize expert observations to match generator observations.
+    with util.vec_norm_disable_training(self.venv_train_norm):
+      expert_obs_norm = self.venv_train_norm._normalize_observation(
+        expert_sample.obs)
 
     # Concatenate rollouts, and label each row as expert or generator.
     obs = np.concatenate([expert_obs_norm, gen_obs])
