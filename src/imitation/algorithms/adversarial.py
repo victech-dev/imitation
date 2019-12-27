@@ -44,7 +44,6 @@ class AdversarialTrainer:
                disc_opt_cls: tf.train.Optimizer = tf.train.AdamOptimizer,
                disc_opt_kwargs: dict = {},
                n_disc_samples_per_buffer: int = 200,
-               n_gen_samples_per_epoch: Optional[int] = None,
                gen_replay_buffer_capacity: Optional[int] = None,
                init_tensorboard: bool = False,
                init_tensorboard_graph: bool = False,
@@ -84,7 +83,6 @@ class AdversarialTrainer:
     self._global_step = tf.train.create_global_step()
 
     self._n_disc_samples_per_buffer = n_disc_samples_per_buffer
-    self._n_gen_samples_per_epoch = n_gen_samples_per_epoch or n_disc_samples_per_buffer
     self.debug_use_ground_truth = debug_use_ground_truth
 
     self.venv = venv
@@ -122,9 +120,7 @@ class AdversarialTrainer:
       self.venv_test = reward_wrapper.RewardVecEnvWrapper(
           self.venv, self.reward_test)
 
-    # VICTECH - reward normalization
-    self.venv_train_norm = VecNormalize(self.venv_train, norm_obs=False)
-    # VICTECH
+    self.venv_train_norm = VecNormalize(self.venv_train)
 
     if gen_replay_buffer_capacity is None:
       gen_replay_buffer_capacity = 20 * self._n_disc_samples_per_buffer
@@ -167,12 +163,8 @@ class AdversarialTrainer:
       if self._init_tensorboard and step % 20 == 0:
         self._summarize(fd, step)
 
-  def train_gen(self, n_steps=10000, learning_rate=None):
+  def train_gen(self, n_steps=10000):
     self._gen_policy.set_env(self.venv_train_norm)
-    # VICTECH - learning_rate
-    if learning_rate is not None:
-      self._gen_policy.learning_rate = learning_rate
-    # VICTECH
     # TODO(adam): learn was not intended to be called for each training batch
     # It should work, but might incur unnecessary overhead: e.g. in PPO2
     # a new Runner instance is created each time. Also a hotspot for errors:
@@ -189,11 +181,8 @@ class AdversarialTrainer:
     """
     gen_rollouts = util.rollout.generate_transitions(
         self._gen_policy, self.venv_train,
-        n_timesteps=self._n_gen_samples_per_epoch)
+        n_timesteps=self._n_disc_samples_per_buffer)
     self._gen_replay_buffer.store(gen_rollouts)
-    # VICTECH
-    self._latest_gen_rollouts = gen_rollouts
-    # VICTECH
 
   def train(self, n_epochs=100, *, n_gen_steps_per_epoch=None,
             n_disc_steps_per_epoch=None):
