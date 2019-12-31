@@ -71,9 +71,9 @@ def _load_stable_baselines(cls: Type[BaseRLModel],
       try:
         normalize_path = os.path.join(path, 'vec_normalize.pkl')
         with open(normalize_path, 'rb') as f:
-          attr_dict = pickle.load(f)
-        vec_normalize = VecNormalize(venv, False)
-        for k, v in attr_dict.items(): setattr(vec_normalize, k, v)
+          vec_normalize = pickle.load(f)
+        vec_normalize.training = False
+        vec_normalize.set_venv(venv)
         policy = NormalizePolicy(policy, vec_normalize)
         tf.logging.info(f"Loaded VecNormalize from '{normalize_path}'")
       except FileNotFoundError:
@@ -152,8 +152,6 @@ def save_stable_model(output_dir: str,
     os.makedirs(output_dir, exist_ok=True)
     model.save(os.path.join(output_dir, 'model.pkl'))
     if vec_normalize is not None:
-      attr_names = ['obs_rms', 'ret_rms', 'clip_obs', 'clip_reward', 'gamma', 'epsilon', 'norm_obs', 'norm_reward']
-      attr_dict = dict([(k, getattr(vec_normalize, k)) for k in attr_names])
       with open(os.path.join(output_dir, 'vec_normalize.pkl'), 'wb') as f:
-        pickle.dump(attr_dict, f)
+        pickle.dump(vec_normalize, f)
     tf.logging.info("Saved policy to %s", output_dir)
