@@ -13,7 +13,6 @@ from typing import Optional
 from matplotlib import pyplot as plt
 import numpy as np
 from sacred.observers import FileStorageObserver
-from stable_baselines import logger as sb_logger
 import tensorflow as tf
 import tqdm
 
@@ -33,7 +32,7 @@ def save(trainer, save_path):
   # TODO(gleave): unify this with the saving logic in data_collect?
   # (Needs #43 to be merged before attempting.)
   serialize.save_stable_model(os.path.join(save_path, "gen_policy"),
-                              trainer._gen_policy)
+                              trainer.gen_policy)
 
 
 @train_ex.main
@@ -43,11 +42,8 @@ def train(_run,
           rollout_path: str,
           n_expert_demos: Optional[int],
           log_dir: str,
-          *,
-          n_epochs: int,
-          n_gen_steps_per_epoch: int,
-          n_disc_steps_per_epoch: int,
           init_trainer_kwargs: dict,
+          total_timesteps: int,
           n_episodes_eval: int,
 
           plot_interval: int,
@@ -56,7 +52,7 @@ def train(_run,
           show_plots: bool,
           init_tensorboard: bool,
 
-          checkpoint_interval: int = 5,
+          checkpoint_interval: int,
           ) -> dict:
   """Train an adversarial-network-based imitation learning algorithm.
 
@@ -87,15 +83,10 @@ def train(_run,
       first `n_expert_demos` trajectories and drop the rest.
     log_dir: Directory to save models and other logging to.
 
-    n_epochs: The number of epochs to train. Each epoch consists of
-      `n_disc_steps_per_epoch` discriminator steps followed by
-      `n_gen_steps_per_epoch` generator steps.
-    n_gen_steps_per_epoch: The number of generator update steps during every
-      training epoch.
-    n_disc_steps_per_epoch: The number of discriminator update steps during
-      every training epoch.
     init_trainer_kwargs: Keyword arguments passed to `init_trainer`,
       used to initialize the trainer.
+    total_timesteps: The number of transitions to sample from the environment
+      during training.
     n_episodes_eval: The number of episodes to average over when calculating
       the average episode reward of the imitation policy for return.
 
@@ -124,6 +115,8 @@ def train(_run,
       return value of `rollout_stats()` on the expert demonstrations loaded from
       `rollout_path`.
   """
+  total_timesteps = int(total_timesteps)
+
   tf.logging.info("Logging to %s", log_dir)
   os.makedirs(log_dir, exist_ok=True)
   sacred_util.build_sacred_symlink(log_dir, _run)
@@ -139,9 +132,6 @@ def train(_run,
   expert_stats = util.rollout.rollout_stats(expert_trajs)
 
   with util.make_session():
-    sb_logger.configure(folder=osp.join(log_dir, 'generator'),
-                        format_strs=['tensorboard', 'stdout'])
-
     if init_tensorboard:
       sb_tensorboard_dir = osp.join(log_dir, "sb_tb")
       kwargs = init_trainer_kwargs
@@ -163,14 +153,21 @@ def train(_run,
       visualizer = None
 
     # Main training loop.
-    for epoch in tqdm.tqdm(range(1, n_epochs+1), desc="epoch"):
-      trainer.train_disc(n_disc_steps_per_epoch)
-      if visualizer:
-        visualizer.add_data_disc_loss(False, epoch)
+    n_epochs = total_timesteps // trainer.gen_batch_size
+    assert n_epochs >= 1, ("No updates (need at least "
+                           f"{trainer.gen_batch_size} timesteps, have only "
+                           f"total_timesteps={total_timesteps})!")
 
-      trainer.train_gen(n_gen_steps_per_epoch)
+    for epoch in tqdm.tqdm(range(1, n_epochs+1), desc="epoch"):
+      trainer.train_gen(trainer.gen_batch_size)
       if visualizer:
         visualizer.add_data_disc_loss(True, epoch)
+      trainer.train_disc(trainer.disc_batch_size)
+
+      util.logger.dumpkvs()
+
+      if visualizer:
+        visualizer.add_data_disc_loss(False, epoch)
 
         if (extra_episode_data_interval > 0
             and epoch % extra_episode_data_interval == 0):  # noqa: E129
@@ -253,6 +250,10 @@ class _TrainVisualizer:
             discriminator is being trained.  We use this to color the data
             points.
     """
+    if not generator_active and len(self.gen_data[0]) == 0:
+      # Skip because `eval_disc_loss()` doesn't have generator samples
+      # available. (`trainer.train_gen()` hasn't been called yet)
+      return
     mode = "gen" if generator_active else "dis"
     X, Y = self.gen_data if generator_active else self.disc_data
     if not generator_active:

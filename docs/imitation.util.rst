@@ -12,6 +12,22 @@ imitation.util.buffer module
    :undoc-members:
    :show-inheritance:
 
+imitation.util.buffering_wrapper module
+---------------------------------------
+
+.. automodule:: imitation.util.buffering_wrapper
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+imitation.util.logger module
+----------------------------
+
+.. automodule:: imitation.util.logger
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 imitation.util.reward\_wrapper module
 -------------------------------------
 
