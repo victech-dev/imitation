@@ -108,6 +108,11 @@ class DiscrimNet(serialize.Serializable, ABC):
     del steps
     log_act_prob = np.squeeze(
       gen_log_prob_fn(observation=obs, actions=act, logp=True))
+    # VICTECH
+    # Exceptional case handling: batch dimension is squeezed when batch_count=1
+    if len(log_act_prob.shape) == 0:
+      log_act_prob = np.expand_dims(log_act_prob, axis=0)
+    # VICTECH
 
     n_gen = len(obs)
     assert obs.shape == next_obs.shape
