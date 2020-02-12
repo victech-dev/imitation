@@ -229,6 +229,21 @@ class AdversarialTrainer:
         logger.logkv(k, v)
       logger.dumpkvs()
 
+  # VICTECH
+  # This function can be used for preventing unwanted policy training at first iteration
+  def rollout_gen(self, total_timesteps: Optional[int] = None, callback=None):
+    if hasattr(self.gen_policy, 'rollout') and callable(getattr(self.gen_policy, 'rollout')):
+      if total_timesteps is None:
+        total_timesteps = self.gen_batch_size
+
+      self.gen_policy.set_env(self.venv_train_norm_buffering)
+      self.gen_policy.rollout(total_timesteps=total_timesteps)
+      gen_samples = self.venv_train_norm_buffering.pop_transitions()
+      self._gen_replay_buffer.store(gen_samples)
+    else:
+      raise RuntimeError("No custom rollout methon in get_policy. ")
+  # VICTECH
+
   def train_gen(self, total_timesteps: Optional[int] = None, callback=None):
     """Trains the generator to maximize the discriminator loss.
 
