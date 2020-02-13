@@ -91,6 +91,13 @@ class BCTrainer:
         "need to construct this within a session scope"
     self._build_tf_graph()
     self.sess.run(tf.global_variables_initializer())
+    # VICTECH
+    self._learning_rate = 0.001
+    # VICTECH
+
+  @property
+  def learning_rate(self):
+    return self._learning_rate
 
   def set_expert_dataset(self, expert_demos: rollout.Transitions):
     """Replace the current expert dataset with a new one.
@@ -131,6 +138,9 @@ class BCTrainer:
         feed_dict = {
             self._true_acts_ph: batch_dict['act'],
             self.policy.obs_ph: batch_dict['obs'],
+            # VICTECH
+            self._learning_rate_ph: self.learning_rate,
+            # VICTECH
         }
         _, loss = self.sess.run(
             [self._train_op, self._log_loss], feed_dict=feed_dict)
@@ -178,7 +188,11 @@ class BCTrainer:
           self.policy.proba_distribution.neglogp(self._true_acts_ph))
       # FIXME: it should be possible to customise both optimiser class and
       # optimiser arguments
-      opt = tf.train.AdamOptimizer()
+      #opt = tf.train.AdamOptimizer()
+      # VICTECH
+      self._learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
+      opt = tf.train.AdamOptimizer(learning_rate=self._learning_rate_ph, epsilon=1e-5)
+      # VICTECH
       self._train_op = opt.minimize(self._log_loss)
 
   def save_policy(self, policy_path: str):
